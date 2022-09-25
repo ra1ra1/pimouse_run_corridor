@@ -16,25 +16,23 @@ T = 9.2 #Tread[cm]
 D = 4.6 #Diameter[cm]
 R = 2.3 #Radious[cm]	
 
-PLOT_MAP = '/home/rairai/catkin_ws/src/pimouse_run_corridor/scripts/plot_xy.sh'
+PLOT_MAP = '/home/rairai/catkin_ws/src/pimouse_run_corridor/scripts/plot_map.sh'
 
 def init_map():
     write_map(0,0,'w')
     plot_time = Popen(PLOT_MAP, shell=True)
 
 def write_map(x,y,op):
-    f=open('map2.csv',op)
+    f=open('map.csv',op)
     f.write(str(x)+ "," + str(y)+"\n")
     f.close()
 
 class Map():
     def __init__(self):
 	self.time = 0.0
-	self.x = 0.0
-	self.y = 0.0
 	self.theta = 0.0
-	self.r = np.array([0.0,0.0])
-	self.q = np.array([0.0,0.0])
+	self.r_o = np.array([0.0,0.0])
+	self.v_o = np.array([0.0,0.0])
 	self.last_l = 0
 	
 	self.sensor_values = LightSensorValues()
@@ -53,22 +51,15 @@ class Map():
 		omega_l = (d_l * RPP)/CTR_P
 		v_r = omega_r * R
 		v_l = omega_l * R
-		v = float(v_l + v_r)/2.0
 		omega = (v_l - v_r)/T
 		self.theta += omega*CTR_P
-		self.q[0] = np.cos(self.theta)
-		self.q[1] = np.sin(self.theta)
-		self.r += (v*CTR_P) * self.q
+		self.v_o[0] = float(v_l + v_r)/2.0 * np.cos(self.theta)
+		self.v_o[1] = float(v_l + v_r)/2.0 * np.sin(self.theta)
+		self.r_o += self.v_o * CTR_P
 		self.last_pulse_count.right = self.pulse_count.right
 		self.last_pulse_count.left = self.pulse_count.left
 		return 1
 	return 0
-	
-    def calc_v(self):
-	l=((2*3.14*R)/N) * self.pulse_count.right	
-	v=(l-self.last_l)/0.1
-	self.last_l = l
-	return v
  
     def light_callback(self,message):
 	self.sensor_values = message
@@ -93,21 +84,18 @@ class Map():
 		fb = self.calc_r()
 		cnt += 1
 		flag = 1
-		#if (cnt%(freq * w_span)==0):
-		if (fb): write_map(self.r[0], self.r[1], 'a')
+		if (fb): write_map(self.r_o[0], self.r_o[1], 'a')
 	    	if (cnt%(freq * p_span)==0):
 		    plot_map = Popen(PLOT_MAP, shell=True)
 		    cnt = 1
 
 	    elif (flag == 1):
-	        write_map(self.r[0], self.r[1], 'a')
+	        write_map(self.r_o[0], self.r_o[1], 'a')
 	        plot_map = Popen(PLOT_MAP, shell=True)
 		cnt = 1
 	        flag = 0
-	        #print("imada!")
 		
 	    self.time += (1.0/freq)
-	    #print(fb)
 	    rate.sleep()
 
 def reset_count():
@@ -124,6 +112,4 @@ if __name__ == '__main__':
     rospy.init_node('mapping')
     rospy.wait_for_service('/motor_on')
     rospy.wait_for_service('/motor_off')
-    #rospy.on_shutdown(rospy.ServiceProxy('/motor_off',Trigger).call)
-    #rospy.ServiceProxy('/motor_off', Trigger).call()
     Map().make()
